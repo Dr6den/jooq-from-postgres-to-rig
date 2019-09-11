@@ -1,0 +1,310 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.jooq</groupId>
+    <artifactId>migration-rigagentdb-from-postgres-to-derby</artifactId>
+    <version>${org.jooq.version}</version>
+    <name>migration-rigagentdb-from-postgres-to-derby</name>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.jooq.org/inc/LICENSE.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <org.springframework.version>4.3.10.RELEASE</org.springframework.version>
+        <org.jooq.version>3.12.1</org.jooq.version>
+    </properties>
+
+    <dependencies>
+        <!-- Database access -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.2.6</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbynet</artifactId>
+            <version>10.14.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbyclient</artifactId>
+            <version>10.14.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq</artifactId>
+            <version>${org.jooq.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-dbcp</groupId>
+            <artifactId>commons-dbcp</artifactId>
+            <version>1.4</version>
+        </dependency>
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+
+        <!-- Spring (transitive dependencies are not listed explicitly) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${org.springframework.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <version>${org.springframework.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+
+        <!-- The resources element will replace available properties in all matching
+             resources. We use this to provide H2 connection configuration to various
+             configuration elements -->
+        <resources>
+            <resource>
+                <filtering>true</filtering>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>**/*.xml</include>
+                    <include>**/pom.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>**/pom.properties</exclude>
+                </excludes>
+            </resource>
+
+        </resources>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.0</version>
+                <configuration>
+                    <fork>true</fork>
+                    <maxmem>1024m</maxmem>
+                    <meminitial>256m</meminitial>
+                    <encoding>UTF-8</encoding>
+
+                    <source>1.8</source>
+                    <target>1.8</target>
+
+                    <debug>true</debug>
+                    <debuglevel>lines,vars,source</debuglevel>
+                    <!-- [#2413] Make compiler warnings a bit more visible
+                         But don't fail (yet) -->
+                    <compilerArgs>
+                        <arg>-Xlint:varargs</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+
+            <!-- We're using the properties plugin to load external properties into Maven.
+                 See this excellent blog post for an explanation:
+                 http://www.petrikainulainen.net/programming/tips-and-tricks/creating-profile-specific-configuration-files-with-maven/ -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.0.0</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>read-project-properties</goal>
+                        </goals>
+                        <configuration>
+                            <files>
+                                <file>${basedir}/../config.properties</file>
+                            </files>
+                        </configuration>
+                    </execution>
+
+                </executions>
+            </plugin>
+
+            <!-- The jOOQ code generator plugin -->
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${org.jooq.version}</version>
+
+                <executions>
+                    <execution>
+                        <id>generate-postgre</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>${db.from.driver}</driver>
+                                <url>${db.from.url}</url>
+                                <user>${db.from.username}</user>
+                                <password>${db.from.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <inputSchema>${db.from.schema}</inputSchema>
+                                </database>
+                                <generate>
+                                    <instanceFields>true</instanceFields>
+                                    <pojos>true</pojos>
+                                    <daos>true</daos>
+                                    <springAnnotations>true</springAnnotations>
+                                </generate>
+                                <target>
+                                    <packageName>org.jooq.example.db.postgres</packageName>
+                                    <directory>target/generated-sources/jooq-postgres</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-derby</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <jdbc>
+                                <driver>${db.to.driver}</driver>
+                                <url>${db.to.url}</url>
+                                <user>${db.to.username}</user>
+                                <password>${db.to.password}</password>
+                            </jdbc>
+                            <generator>
+                                <database>
+                                    <inputSchema>${db.to.schema}</inputSchema>
+                                </database>
+                                <generate>
+                                    <instanceFields>true</instanceFields>
+                                    <pojos>true</pojos>
+                                    <daos>true</daos>
+                                    <springAnnotations>true</springAnnotations>
+                                </generate>
+                                <target>
+                                    <packageName>org.jooq.example.db.derby</packageName>
+                                    <directory>target/generated-sources/jooq-derby</directory>
+                                </target>
+                            </generator>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>1.6.0</version>
+                    <executions>
+                        <execution>
+                            <id>my-execution</id>
+                            <phase>install</phase>
+                            <goals>
+                                <goal>java</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <workingDirectory>${project.basedir}</workingDirectory>
+                        <mainClass>com.dvsts.migration.MigrationRunner</mainClass>
+                        <systemProperties>
+                            <systemProperty>
+                                <key>db.from.driver</key>
+                                <value>${db.from.driver}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.from.url</key>
+                                <value>${db.from.url}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.from.username</key>
+                                <value>${db.from.username}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.from.password</key>
+                                <value>${db.from.password}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.from.schema</key>
+                                <value>${db.from.schema}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.to.driver</key>
+                                <value>${db.to.driver}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.to.url</key>
+                                <value>${db.to.url}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.to.username</key>
+                                <value>${db.to.username}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.to.password</key>
+                                <value>${db.to.password}</value>
+                            </systemProperty>
+                            <systemProperty>
+                                <key>db.to.schema</key>
+                                <value>${db.to.schema}</value>
+                            </systemProperty>
+                        </systemProperties>
+                    </configuration>
+                </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>
+                                ${project.build.directory}/libs
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>libs/</classpathPrefix>
+                            <mainClass>
+                                com.dvsts.migration.MigrationRunner
+                            </mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
