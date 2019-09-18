@@ -1,30 +1,22 @@
 package com.dvsts.migration;
 
 import org.jooq.DSLContext;
-import org.jooq.Record;
-import static org.jooq.impl.DSL.field;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jooq.Field;
-import org.jooq.Table;
-//import org.jooq.example.db.postgres.tables.Cdc;
 import static org.jooq.impl.DSL.name;
 import static org.jooq.impl.DSL.table;
-import org.jooq.impl.SQLDataType;
-
 
 
 /**
@@ -33,46 +25,44 @@ import org.jooq.impl.SQLDataType;
  */
 public class MigrationRunner {
     public static void main(String[] args0) {
-        String dbFromDriver = System.getProperty("db.from.driver");
-        String dbFromUrl = System.getProperty("db.from.url");
-        String dbFromUsername = System.getProperty("db.from.username");
-        String dbFromPassword = System.getProperty("db.from.password");
-        String dbFromSchema = System.getProperty("db.from.schema");
+        String dbFromDriver = "";
+        String dbFromUrl = "";
+        String dbFromUsername = "";
+        String dbFromPassword = "";
+        String dbFromSchema = "";
 
-        String dbToDriver = System.getProperty("db.to.driver");
-        String dbToUrl = System.getProperty("db.to.url");
-        String dbToUsername = System.getProperty("db.to.username");
-        String dbToPassword = System.getProperty("db.to.password");
-        String dbToSchema = System.getProperty("db.to.schema");
+        String dbToDriver = "";
+        String dbToUrl = "";
+        String dbToUsername = "";
+        String dbToPassword = "";
+        String dbToSchema = "";
+        Properties prop = new Properties();
+        InputStream input = null;
 
-        if (dbFromDriver == null) {
-            Properties prop = new Properties();
-            InputStream input = null;
+        try {
+            input = new FileInputStream("./config.properties");
+            prop.load(input);
 
-            try {
-                input = new FileInputStream("./config.properties");
-                prop.load(input);
+            dbFromDriver = prop.getProperty("db.from.driver");
+            dbFromUrl = prop.getProperty("db.from.url");
+            dbFromUsername = prop.getProperty("db.from.username");
+            dbFromPassword = prop.getProperty("db.from.password");
+            dbFromSchema = prop.getProperty("db.from.schema");
 
-                dbFromDriver = prop.getProperty("db.from.driver");
-                dbFromUrl = prop.getProperty("db.from.url");
-                dbFromUsername = prop.getProperty("db.from.username");
-                dbFromPassword = prop.getProperty("db.from.password");
-                dbFromSchema = prop.getProperty("db.from.schema");
-
-                dbToDriver = prop.getProperty("db.to.driver");
-                dbToUrl = prop.getProperty("db.to.url");
-                dbToUsername = prop.getProperty("db.to.username");
-                dbToPassword = prop.getProperty("db.to.password");
-                dbToSchema = prop.getProperty("db.to.schema");
-            } catch (IOException ex) {System.out.println("please put config.properties file to the same folder where jar lies..."+ex.getMessage());
-                ex.printStackTrace();
-            } finally {
-                if (input != null) {
-                    try {
-                        input.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+            dbToDriver = prop.getProperty("db.to.driver");
+            dbToUrl = prop.getProperty("db.to.url");
+            dbToUsername = prop.getProperty("db.to.username");
+            dbToPassword = prop.getProperty("db.to.password");
+            dbToSchema = prop.getProperty("db.to.schema");
+        } catch (IOException ex) {
+            System.out.println("please put config.properties file to the same folder where jar lies..." + ex.getMessage());
+            ex.printStackTrace();
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
@@ -152,8 +142,8 @@ public class MigrationRunner {
     }
 
     private static void deleteAldAndInsertNewDataToTheTable(DSLContext target, Connection connection, String nameOfTable, String csvData) throws IOException {
-        target.deleteFrom(table(name(nameOfTable))).execute();
-        target.loadInto(table(name(nameOfTable))).loadCSV(csvData).fields(getFields(connection, nameOfTable)).execute();
+        target.deleteFrom(table(name(nameOfTable.toUpperCase()))).execute();
+        target.loadInto(table(name(nameOfTable.toUpperCase()))).loadCSV(csvData).fields(getFields(connection, nameOfTable)).execute();
     }
 
     private static String getCsvDataFromSinglePostgresTable(String tableName, Connection conn) {
@@ -163,7 +153,7 @@ public class MigrationRunner {
    
     private static List<Field<String>> getFields(Connection conn, String tableName) {
         DSLContext source = DSL.using(conn, SQLDialect.DERBY);
-        Field[] fields = source.select().from("\""+tableName+"\"").fetch().fields();
+        Field[] fields = source.select().from(tableName.toUpperCase()).fetch().fields();
         return Arrays.asList(fields);
     }
 }
